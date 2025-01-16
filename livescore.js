@@ -42,7 +42,7 @@ function createCalendar() {
 
 async function fetchSportsData(date) {
     try {
-        const response = await fetch(`http://api.bettests.com/api/sports?date=${date}`);
+        const response = await fetch(`https://api.bettests.com/api/sports?date=${date}`);
         const data = await response.json();
         return data;
     } catch (error) {
@@ -133,9 +133,9 @@ async function showMatchDetails(matchId) {
     
     try {
         const [matchData, statsData, lineupsData] = await Promise.all([
-            fetch(`http://api.bettests.com/api/match/${matchId}`).then(r => r.json()),
-            fetch(`http://api.bettests.com/api/match/${matchId}/stats`).then(r => r.json()),
-            fetch(`http://api.bettests.com/api/match/${matchId}/lineups`).then(r => r.json())
+            fetch(`https://api.bettests.com/api/match/${matchId}`).then(r => r.json()),
+            fetch(`https://api.bettests.com/api/match/${matchId}/stats`).then(r => r.json()),
+            fetch(`https://api.bettests.com/api/match/${matchId}/lineups`).then(r => r.json())
         ]);
 
         // Create match detail view
