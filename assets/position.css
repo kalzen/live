@@ -1606,7 +1606,7 @@ body {
     position: relative;
 }
 
-@media(min-width: 1024px) {
+/* @media(min-width: 1024px) {
     .A {
         border: 1px solid #222;
         border-radius: 7.5px;
@@ -1614,7 +1614,7 @@ body {
         min-height: 630px;
         width: 470px;
     }
-}
+} */
 
 /* Stage styling */
 .stage {
