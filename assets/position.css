@@ -1,3 +1,114 @@
+#__livescore {
+    max-width: 700px;
+    margin: 0 auto;
+    position: relative;
+}
+body {
+    margin: 0;
+    padding: 0;
+}
+.Zf {
+    font-weight: bold;
+    color: #fff;
+}
+.back-button {
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 10px;
+    margin-bottom: 10px;
+}
+.back-button:hover {
+    opacity: 0.8;
+}
+.calendar-popup {
+    display: none;
+    position: absolute;
+    top: 100%; /* Position relative to match-rows_calendar */
+    right: 10px; /* Align with calendar icon */
+    background: #222;
+    border-radius: 8px;
+    padding: 15px;
+    z-index: 1000;
+    width: 280px;
+    color: white;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    margin-top: 10px;
+}
+
+.calendar-popup.visible {
+    display: block;
+}
+
+.calendar-popup::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    right: 10px;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 8px solid #222;
+}
+
+.calendar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.calendar-nav {
+    cursor: pointer;
+    padding: 5px 10px;
+    user-select: none;
+}
+
+.calendar-nav:hover {
+    opacity: 0.8;
+}
+
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 5px;
+    text-align: center;
+}
+
+.calendar-day {
+    padding: 8px;
+    font-size: 14px;
+}
+
+.calendar-date {
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 4px;
+}
+
+.calendar-date:hover {
+    background: #333;
+}
+
+.calendar-date.today {
+    background: #444;
+    font-weight: bold;
+}
+
+.calendar-date.selected {
+    background: #666;
+}
+
+.oh {
+    position: relative;
+    display: inline-block;
+}
+
+.mh {
+    position: relative; /* Add this */
+}
+
 @keyframes ck {
     0% {
         transform: translateY(0)

@@ -132,11 +132,23 @@ async function showMatchDetails(matchId) {
     container.innerHTML = '';
     
     try {
-        const [matchData, statsData, lineupsData] = await Promise.all([
+        // Fetch match and stats data first
+        const [matchData, statsData] = await Promise.all([
             fetch(`https://api.bettests.com/api/match/${matchId}`).then(r => r.json()),
-            fetch(`https://api.bettests.com/api/match/${matchId}/stats`).then(r => r.json()),
-            fetch(`https://api.bettests.com/api/match/${matchId}/lineups`).then(r => r.json())
+            fetch(`https://api.bettests.com/api/match/${matchId}/stats`).then(r => r.json())
         ]);
+
+        // Fetch lineups data separately to handle errors
+        let hasLineups = false;
+        let lineupsData = null;
+
+        try {
+            lineupsData = await fetch(`https://api.bettests.com/api/match/${matchId}/lineups`).then(r => r.json());
+            hasLineups = lineupsData?.pageProps?.initialEventData?.event != null;
+        } catch (lineupsError) {
+            console.warn('Failed to load lineups:', lineupsError);
+            hasLineups = false;
+        }
 
         // Create match detail view
         const matchDetailDiv = document.createElement('div');
@@ -147,7 +159,7 @@ async function showMatchDetails(matchId) {
                     <div class="Ve tabsInner Xe">
                         <div class="Dl active" id="tab-summary">Summary</div>
                         <div class="Dl" id="tab-stats">Stats</div>
-                        <div class="Dl" id="tab-lineups">Line-ups</div>
+                        ${hasLineups ? '<div class="Dl" id="tab-lineups">Line-ups</div>' : ''}
                     </div>
                 </div>
                 <div id="tab-content-summary" class="Ye active">
@@ -156,9 +168,11 @@ async function showMatchDetails(matchId) {
                 <div id="tab-content-stats" class="Ye" style="display: none">
                     ${createDetailedStats(statsData.pageProps?.initialEventData.event.statistics)}
                 </div>
-                <div id="tab-content-lineups" class="Ye" style="display: none">
-                    ${createLineupsContent(lineupsData.pageProps?.initialEventData?.event)}
-                </div>
+                ${hasLineups ? `
+                    <div id="tab-content-lineups" class="Ye" style="display: none">
+                        ${createLineupsContent(lineupsData.pageProps?.initialEventData?.event)}
+                    </div>
+                ` : ''}
             </div>
         `;
 
@@ -249,6 +263,7 @@ async function initializeApp() {
     const today = formatDate(new Date());
     await updateMatches(today);
     initCalendarPopup();
+    initializeLiveButton(); // Add this line
 }
 
 // Initialize when DOM is loaded
@@ -259,53 +274,131 @@ function initCalendarPopup() {
     const calendarPopup = document.getElementById('calendar-popup');
     const prevMonth = document.getElementById('prev-month');
     const nextMonth = document.getElementById('next-month');
+    const currentMonthDisplay = document.getElementById('current-month');
+    const calendarGrid = document.querySelector('.calendar-grid');
     let currentDate = new Date();
+    let selectedDate = new Date();
 
     function renderCalendar(date) {
-        const monthYear = document.getElementById('current-month');
-        const grid = document.getElementById('calendar-grid');
+        // Update month/year display
+        currentMonthDisplay.textContent = date.toLocaleString('default', { 
+            month: 'long', 
+            year: 'numeric' 
+        });
+
+        // Clear existing dates
+        const existingDates = calendarGrid.querySelectorAll('.calendar-date');
+        existingDates.forEach(date => date.remove());
+
+        // Calculate first day of month
         const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
         const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0);
         
-        monthYear.textContent = date.toLocaleString('default', { month: 'long', year: 'numeric' });
-        
-        // Clear existing days
-        const daysNodes = grid.querySelectorAll('.day');
-        daysNodes.forEach(node => node.remove());
-
         // Add empty cells for days before first day of month
         let firstDayIndex = firstDay.getDay() || 7; // Convert Sunday from 0 to 7
         for (let i = 1; i < firstDayIndex; i++) {
-            const emptyDay = document.createElement('div');
-            emptyDay.className = 'calendar-day';
-            grid.appendChild(emptyDay);
+            const emptyCell = document.createElement('div');
+            emptyCell.className = 'calendar-day';
+            calendarGrid.appendChild(emptyCell);
         }
 
         // Add days of month
         for (let i = 1; i <= lastDay.getDate(); i++) {
-            const dayEl = document.createElement('div');
-            dayEl.className = 'calendar-day day';
-            if (i === new Date().getDate() && date.getMonth() === new Date().getMonth()) {
-                dayEl.classList.add('today');
+            const dateEl = document.createElement('div');
+            dateEl.className = 'calendar-date';
+            dateEl.textContent = i;
+
+            const currentDateStr = formatDate(new Date(date.getFullYear(), date.getMonth(), i));
+            dateEl.setAttribute('data-date', currentDateStr);
+
+            // Add classes for today and selected date
+            if (i === new Date().getDate() && 
+                date.getMonth() === new Date().getMonth() && 
+                date.getFullYear() === new Date().getFullYear()) {
+                dateEl.classList.add('today');
             }
-            dayEl.textContent = i;
-            grid.appendChild(dayEl);
+            if (i === selectedDate.getDate() && 
+                date.getMonth() === selectedDate.getMonth() && 
+                date.getFullYear() === selectedDate.getFullYear()) {
+                dateEl.classList.add('selected');
+            }
+
+            // Add click handler
+            dateEl.addEventListener('click', () => {
+                const newDate = dateEl.getAttribute('data-date');
+                updateMatches(newDate);
+                calendarPopup.classList.remove('visible');
+                selectedDate = new Date(date.getFullYear(), date.getMonth(), i);
+                renderCalendar(currentDate); // Re-render to update selected state
+            });
+
+            calendarGrid.appendChild(dateEl);
         }
     }
 
-    function changeMonth(offset) {
-        currentDate.setMonth(currentDate.getMonth() + offset);
-        renderCalendar(currentDate);
-    }
-
-    calendarTrigger.addEventListener('click', () => {
+    // Show/hide calendar
+    calendarTrigger.addEventListener('click', (e) => {
+        e.stopPropagation();
         calendarPopup.classList.toggle('visible');
     });
 
-    prevMonth.addEventListener('click', () => changeMonth(-1));
-    nextMonth.addEventListener('click', () => changeMonth(1));
+    // Handle month navigation
+    prevMonth.addEventListener('click', () => {
+        currentDate.setMonth(currentDate.getMonth() - 1);
+        renderCalendar(currentDate);
+    });
 
+    nextMonth.addEventListener('click', () => {
+        currentDate.setMonth(currentDate.getMonth() + 1);
+        renderCalendar(currentDate);
+    });
+
+    // Close calendar when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!calendarPopup.contains(e.target) && !calendarTrigger.contains(e.target)) {
+            calendarPopup.classList.remove('visible');
+        }
+    });
+
+    // Initial render
     renderCalendar(currentDate);
+}
+
+function updateCalendarDates(selectedDate) {
+    const container = document.getElementById('calendar-dates');
+    container.innerHTML = ''; // Clear existing dates
+    
+    // Generate dates centered around selected date
+    const dates = [];
+    for (let i = -2; i <= 2; i++) {
+        const date = new Date(selectedDate);
+        date.setDate(selectedDate.getDate() + i);
+        dates.push(date);
+    }
+    
+    dates.forEach((date) => {
+        const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+        const isToday = date.toDateString() === new Date().toDateString();
+        const isSelected = date.toDateString() === selectedDate.toDateString();
+        
+        const link = document.createElement('a');
+        link.className = `Sg ph hh ${isSelected ? 'Xg' : ''}`;
+        link.setAttribute('data-date', formatDate(date));
+        link.innerHTML = `
+            <span class="${isSelected ? 'Xg' : ''}">${isToday ? 'Today' : dayNames[date.getDay()]}</span>
+            <span class="eh ${isSelected ? 'Xg' : ''}">${date.getDate()} ${date.toLocaleString('default', { month: 'short' }).toUpperCase()}</span>
+        `;
+        
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            updateMatches(formatDate(date));
+            // Update active state
+            document.querySelectorAll('.Sg').forEach(a => a.classList.remove('Xg'));
+            link.classList.add('Xg');
+        });
+        
+        container.appendChild(link);
+    });
 }
 
 // Add this helper function for card icons
@@ -670,6 +763,7 @@ async function initializeApp() {
     const today = formatDate(new Date());
     await updateMatches(today);
     initCalendarPopup();
+    initializeLiveButton(); // Add this line
 }
 
 // Initialize when DOM is loaded
@@ -680,53 +774,131 @@ function initCalendarPopup() {
     const calendarPopup = document.getElementById('calendar-popup');
     const prevMonth = document.getElementById('prev-month');
     const nextMonth = document.getElementById('next-month');
+    const currentMonthDisplay = document.getElementById('current-month');
+    const calendarGrid = document.querySelector('.calendar-grid');
     let currentDate = new Date();
+    let selectedDate = new Date();
 
     function renderCalendar(date) {
-        const monthYear = document.getElementById('current-month');
-        const grid = document.getElementById('calendar-grid');
+        // Update month/year display
+        currentMonthDisplay.textContent = date.toLocaleString('default', { 
+            month: 'long', 
+            year: 'numeric' 
+        });
+
+        // Clear existing dates
+        const existingDates = calendarGrid.querySelectorAll('.calendar-date');
+        existingDates.forEach(date => date.remove());
+
+        // Calculate first day of month
         const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
         const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0);
         
-        monthYear.textContent = date.toLocaleString('default', { month: 'long', year: 'numeric' });
-        
-        // Clear existing days
-        const daysNodes = grid.querySelectorAll('.day');
-        daysNodes.forEach(node => node.remove());
-
         // Add empty cells for days before first day of month
         let firstDayIndex = firstDay.getDay() || 7; // Convert Sunday from 0 to 7
         for (let i = 1; i < firstDayIndex; i++) {
-            const emptyDay = document.createElement('div');
-            emptyDay.className = 'calendar-day';
-            grid.appendChild(emptyDay);
+            const emptyCell = document.createElement('div');
+            emptyCell.className = 'calendar-day';
+            calendarGrid.appendChild(emptyCell);
         }
 
         // Add days of month
         for (let i = 1; i <= lastDay.getDate(); i++) {
-            const dayEl = document.createElement('div');
-            dayEl.className = 'calendar-day day';
-            if (i === new Date().getDate() && date.getMonth() === new Date().getMonth()) {
-                dayEl.classList.add('today');
+            const dateEl = document.createElement('div');
+            dateEl.className = 'calendar-date';
+            dateEl.textContent = i;
+
+            const currentDateStr = formatDate(new Date(date.getFullYear(), date.getMonth(), i));
+            dateEl.setAttribute('data-date', currentDateStr);
+
+            // Add classes for today and selected date
+            if (i === new Date().getDate() && 
+                date.getMonth() === new Date().getMonth() && 
+                date.getFullYear() === new Date().getFullYear()) {
+                dateEl.classList.add('today');
             }
-            dayEl.textContent = i;
-            grid.appendChild(dayEl);
+            if (i === selectedDate.getDate() && 
+                date.getMonth() === selectedDate.getMonth() && 
+                date.getFullYear() === selectedDate.getFullYear()) {
+                dateEl.classList.add('selected');
+            }
+
+            // Add click handler
+            dateEl.addEventListener('click', () => {
+                const newDate = dateEl.getAttribute('data-date');
+                updateMatches(newDate);
+                calendarPopup.classList.remove('visible');
+                selectedDate = new Date(date.getFullYear(), date.getMonth(), i);
+                renderCalendar(currentDate); // Re-render to update selected state
+            });
+
+            calendarGrid.appendChild(dateEl);
         }
     }
 
-    function changeMonth(offset) {
-        currentDate.setMonth(currentDate.getMonth() + offset);
-        renderCalendar(currentDate);
-    }
-
-    calendarTrigger.addEventListener('click', () => {
+    // Show/hide calendar
+    calendarTrigger.addEventListener('click', (e) => {
+        e.stopPropagation();
         calendarPopup.classList.toggle('visible');
     });
 
-    prevMonth.addEventListener('click', () => changeMonth(-1));
-    nextMonth.addEventListener('click', () => changeMonth(1));
+    // Handle month navigation
+    prevMonth.addEventListener('click', () => {
+        currentDate.setMonth(currentDate.getMonth() - 1);
+        renderCalendar(currentDate);
+    });
 
+    nextMonth.addEventListener('click', () => {
+        currentDate.setMonth(currentDate.getMonth() + 1);
+        renderCalendar(currentDate);
+    });
+
+    // Close calendar when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!calendarPopup.contains(e.target) && !calendarTrigger.contains(e.target)) {
+            calendarPopup.classList.remove('visible');
+        }
+    });
+
+    // Initial render
     renderCalendar(currentDate);
+}
+
+function updateCalendarDates(selectedDate) {
+    const container = document.getElementById('calendar-dates');
+    container.innerHTML = ''; // Clear existing dates
+    
+    // Generate dates centered around selected date
+    const dates = [];
+    for (let i = -2; i <= 2; i++) {
+        const date = new Date(selectedDate);
+        date.setDate(selectedDate.getDate() + i);
+        dates.push(date);
+    }
+    
+    dates.forEach((date) => {
+        const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+        const isToday = date.toDateString() === new Date().toDateString();
+        const isSelected = date.toDateString() === selectedDate.toDateString();
+        
+        const link = document.createElement('a');
+        link.className = `Sg ph hh ${isSelected ? 'Xg' : ''}`;
+        link.setAttribute('data-date', formatDate(date));
+        link.innerHTML = `
+            <span class="${isSelected ? 'Xg' : ''}">${isToday ? 'Today' : dayNames[date.getDay()]}</span>
+            <span class="eh ${isSelected ? 'Xg' : ''}">${date.getDate()} ${date.toLocaleString('default', { month: 'short' }).toUpperCase()}</span>
+        `;
+        
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            updateMatches(formatDate(date));
+            // Update active state
+            document.querySelectorAll('.Sg').forEach(a => a.classList.remove('Xg'));
+            link.classList.add('Xg');
+        });
+        
+        container.appendChild(link);
+    });
 }
 
 // Add these helper functions for different event types
@@ -875,4 +1047,42 @@ function getGoalEventIcon() {
             </svg>
         </span>
     `;
+}
+
+async function fetchLiveMatches() {
+    try {
+        const response = await fetch('https://api.bettests.com/api/sports/live');
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error('Error fetching live matches:', error);
+        return null;
+    }
+}
+
+function initializeLiveButton() {
+    const liveButton = document.querySelector('[data-testid="match-calendar-live"]');
+    if (liveButton) {
+        liveButton.addEventListener('click', async (e) => {
+            e.preventDefault();
+            
+            // Remove active state from calendar dates
+            document.querySelectorAll('.Sg').forEach(a => a.classList.remove('Xg'));
+            
+            // Add active state to live button
+            liveButton.classList.add('Xg');
+            
+            // Fetch and display live matches
+            const container = document.getElementById('matches-container');
+            container.innerHTML = ''; // Clear existing matches
+            
+            const data = await fetchLiveMatches();
+            if (data && data.Stages) {
+                data.Stages.forEach(stage => {
+                    const stageElement = createStageElement(stage);
+                    container.appendChild(stageElement);
+                });
+            }
+        });
+    }
 }
